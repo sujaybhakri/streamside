@@ -1,135 +1,394 @@
-# Turborepo starter
+# Streamside 🎥
 
-This Turborepo starter is maintained by the Turborepo core team.
+A high-fidelity recording platform inspired by [Riverside.fm](https://riverside.fm). Record remote podcast episodes, interviews, and video content with studio-quality audio and video.
 
-## Using this example
+> ⚠️ **Work In Progress** - This project is under active development. See the [Implementation Status](#-implementation-status) section for details.
 
-Run the following command:
+## 📋 Table of Contents
 
-```sh
-npx create-turbo@latest
-```
+- [Overview](#-overview)
+- [Implementation Status](#-implementation-status)
+- [Tech Stack](#-tech-stack)
+- [Project Structure](#-project-structure)
+- [Getting Started](#-getting-started)
+- [Environment Variables](#-environment-variables)
+- [Known Issues & Bugs](#-known-issues--bugs)
+- [Architecture](#-architecture)
+- [Roadmap](#-roadmap)
 
-## What's inside?
+---
 
-This Turborepo includes the following packages/apps:
+## 🎯 Overview
 
-### Apps and Packages
+Streamside uses a **dual-stream architecture**:
 
-- `docs`: a [Next.js](https://nextjs.org/) app
-- `web`: another [Next.js](https://nextjs.org/) app
-- `@repo/ui`: a stub React component library shared by both `web` and `docs` applications
-- `@repo/eslint-config`: `eslint` configurations (includes `eslint-config-next` and `eslint-config-prettier`)
-- `@repo/typescript-config`: `tsconfig.json`s used throughout the monorepo
+1. **LiveKit Stream** - Powers real-time video calls with adaptive bitrate (what participants see live)
+2. **MediaRecorder Stream** - Records locally at maximum quality (up to 4K video, 48kHz audio) and uploads progressively in chunks
 
-Each package/app is 100% [TypeScript](https://www.typescriptlang.org/).
+This approach ensures that even if network conditions are poor, the final recording is always high quality because it's captured locally.
 
-### Utilities
+---
 
-This Turborepo has some additional tools already setup for you:
+## 📊 Implementation Status
 
-- [TypeScript](https://www.typescriptlang.org/) for static type checking
-- [ESLint](https://eslint.org/) for code linting
-- [Prettier](https://prettier.io) for code formatting
+### ✅ Working Features
 
-### Build
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Authentication** | ✅ Working | Email/password sign up & sign in via Better Auth |
+| **Google OAuth** | ✅ Working | Optional, requires Google credentials |
+| **Database** | ✅ Working | PostgreSQL with Prisma ORM (Supabase compatible) |
+| **Studio Creation** | ✅ Working | Create studios from dashboard |
+| **Studio Lobby** | ⚠️ Partial | Can select camera/microphone, preview works |
+| **LiveKit Integration** | ⚠️ Partial | Room connection works, but UI is incomplete |
+| **Turborepo Setup** | ✅ Working | Monorepo with shared packages |
+| **Build & Deploy** | ✅ Working | Production build succeeds |
 
-To build all apps and packages, run the following command:
+### ⚠️ Partially Working
 
-```
-cd my-turborepo
+| Feature | Status | Issue |
+|---------|--------|-------|
+| **Studio Call Page** | ⚠️ Broken | LiveKit room connects but nothing displays - VideoConference component not rendering properly |
+| **Recording Controls** | ⚠️ Broken | Start/Stop recording buttons exist but MediaRecorder service not fully integrated |
+| **Chunk Upload** | ⚠️ Untested | API endpoint exists but MinIO integration not tested |
+| **Socket.io Signaling** | ⚠️ Untested | Server setup exists but real-time state sync untested |
 
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build
+### ❌ Not Implemented Yet
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build
-yarn dlx turbo build
-pnpm exec turbo build
-```
+| Feature | Status | Notes |
+|---------|--------|-------|
+| **Invite Links** | ❌ Missing | Schema doesn't have `inviteCode` field, dashboard shows undefined |
+| **Guest Joining** | ❌ Missing | No way for guests to join via invite link |
+| **Recording Playback** | ❌ Missing | No UI to view/download recordings |
+| **Post-Processing** | ❌ Missing | No merging of chunks, no download functionality |
+| **Screen Sharing** | ❌ Missing | Not implemented |
+| **Chat** | ❌ Missing | No in-call messaging |
+| **Mobile Support** | ❌ Missing | UI not responsive |
 
-You can build a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
+---
 
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo build --filter=docs
+## 🛠 Tech Stack
 
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo build --filter=docs
-yarn exec turbo build --filter=docs
-pnpm exec turbo build --filter=docs
-```
+| Layer | Technology |
+|-------|-----------|
+| **Monorepo** | Turborepo + pnpm workspaces |
+| **Frontend** | Next.js 16, React 19, TypeScript, Tailwind CSS v4 |
+| **Backend** | Next.js API Routes |
+| **Database** | PostgreSQL (Supabase) + Prisma 7 |
+| **Auth** | Better Auth |
+| **Media Server** | LiveKit (WebRTC SFU) |
+| **Object Storage** | MinIO (S3-compatible) |
+| **Real-time** | Socket.io + Redis adapter |
+| **State** | Zustand |
 
-### Develop
+---
 
-To develop all apps and packages, run the following command:
-
-```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev
-yarn exec turbo dev
-pnpm exec turbo dev
-```
-
-You can develop a specific package by using a [filter](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters):
-
-```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo dev --filter=web
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo dev --filter=web
-yarn exec turbo dev --filter=web
-pnpm exec turbo dev --filter=web
-```
-
-### Remote Caching
-
-> [!TIP]
-> Vercel Remote Cache is free for all plans. Get started today at [vercel.com](https://vercel.com/signup?/signup?utm_source=remote-cache-sdk&utm_campaign=free_remote_cache).
-
-Turborepo can use a technique known as [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching) to share cache artifacts across machines, enabling you to share build caches with your team and CI/CD pipelines.
-
-By default, Turborepo will cache locally. To enable Remote Caching you will need an account with Vercel. If you don't have an account you can [create one](https://vercel.com/signup?utm_source=turborepo-examples), then enter the following commands:
+## 📁 Project Structure
 
 ```
-cd my-turborepo
-
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo login
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo login
-yarn exec turbo login
-pnpm exec turbo login
+streamside/
+├── apps/
+│   └── web/                          # Next.js application
+│       ├── src/
+│       │   ├── app/                  # App Router pages
+│       │   │   ├── api/              # API routes
+│       │   │   │   ├── auth/[...all] # Better Auth handler
+│       │   │   │   ├── livekit-token # Generate LiveKit tokens
+│       │   │   │   ├── studios       # CRUD for studios
+│       │   │   │   └── upload-chunk  # Recording chunk upload
+│       │   │   ├── auth/signin       # Sign in page
+│       │   │   ├── dashboard         # User dashboard
+│       │   │   └── studio/[studioId] # Studio pages
+│       │   │       ├── page.tsx      # Lobby (device selection)
+│       │   │       └── call/page.tsx # Call interface
+│       │   ├── lib/                  # Utilities
+│       │   ├── services/             # MediaRecorderService
+│       │   ├── store/                # Zustand store
+│       │   └── pages/api/socket/     # Socket.io handler (Pages Router)
+│       └── package.json
+├── packages/
+│   ├── database/                     # Prisma schema & client
+│   │   ├── prisma/
+│   │   │   ├── schema.prisma
+│   │   │   └── migrations/
+│   │   ├── prisma.config.ts          # Prisma 7 config
+│   │   └── src/
+│   │       ├── client.ts             # Prisma client singleton
+│   │       └── index.ts              # Exports
+│   ├── types/                        # Shared TypeScript types
+│   └── ui/                           # Shared UI components
+├── docker-compose.yml                # Local infrastructure
+├── livekit.yaml                      # LiveKit server config
+├── turbo.json                        # Turborepo config
+└── package.json                      # Root package.json
 ```
 
-This will authenticate the Turborepo CLI with your [Vercel account](https://vercel.com/docs/concepts/personal-accounts/overview).
+---
 
-Next, you can link your Turborepo to your Remote Cache by running the following command from the root of your Turborepo:
+## 🚀 Getting Started
+
+### Prerequisites
+
+- **Node.js** 18+
+- **pnpm** 9+ (`npm install -g pnpm`)
+- **Docker** & Docker Compose (for local services)
+
+### Option A: Using Supabase (Recommended for Quick Start)
+
+1. **Clone and install:**
+   ```bash
+   git clone https://github.com/rohitvkgdg/streamside.git
+   cd streamside
+   pnpm install
+   ```
+
+2. **Set up Supabase:**
+   - Create a project at [supabase.com](https://supabase.com)
+   - Get your connection strings from Project Settings > Database
+
+3. **Configure environment:**
+   ```bash
+   cp .env.example .env
+   ```
+   
+   Edit `.env` and add your Supabase URLs:
+   ```env
+   # Pooler URL (port 6543) - for app queries
+   DATABASE_URL="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:6543/postgres?pgbouncer=true"
+   
+   # Direct URL (port 5432) - for migrations
+   DIRECT_URL="postgresql://postgres.[project-ref]:[password]@aws-0-[region].pooler.supabase.com:5432/postgres"
+   ```
+
+4. **Run migrations:**
+   ```bash
+   cd packages/database
+   pnpm db:migrate
+   ```
+
+5. **Generate Prisma client:**
+   ```bash
+   pnpm db:generate
+   ```
+
+6. **Start local services (LiveKit, Redis, MinIO):**
+   ```bash
+   docker-compose up -d redis livekit minio minio-init
+   ```
+
+7. **Start development server:**
+   ```bash
+   pnpm dev
+   ```
+
+8. **Open browser:**
+   Navigate to [http://localhost:3000](http://localhost:3000)
+
+### Option B: Full Local Development (Docker PostgreSQL)
+
+1. **Start all infrastructure:**
+   ```bash
+   docker-compose up -d
+   ```
+
+2. **Configure `.env` for local PostgreSQL:**
+   ```env
+   DATABASE_URL="postgresql://streamside:streamside123@localhost:5432/streamside"
+   DIRECT_URL="postgresql://streamside:streamside123@localhost:5432/streamside"
+   ```
+
+3. **Follow steps 4-8 from Option A**
+
+---
+
+## 🔐 Environment Variables
+
+Create a `.env` file in the root directory:
+
+```env
+# ===========================================
+# Database (Supabase PostgreSQL)
+# ===========================================
+DATABASE_URL="postgresql://..."      # Pooler URL (port 6543)
+DIRECT_URL="postgresql://..."        # Direct URL (port 5432) for migrations
+
+# ===========================================
+# Better Auth
+# ===========================================
+BETTER_AUTH_SECRET="generate-a-random-secret-here"
+BETTER_AUTH_URL="http://localhost:3000"
+NEXT_PUBLIC_APP_URL="http://localhost:3000"
+
+# Google OAuth (Optional)
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+
+# ===========================================
+# LiveKit (WebRTC)
+# ===========================================
+LIVEKIT_API_KEY="devkey"
+LIVEKIT_API_SECRET="secret"
+NEXT_PUBLIC_LIVEKIT_WS_URL="ws://localhost:7880"
+
+# ===========================================
+# MinIO (Object Storage)
+# ===========================================
+MINIO_ENDPOINT="localhost"
+MINIO_PORT="9000"
+MINIO_ACCESS_KEY="minioadmin"
+MINIO_SECRET_KEY="minioadmin"
+MINIO_BUCKET="streamside-recordings"
+MINIO_USE_SSL="false"
+
+# ===========================================
+# Redis
+# ===========================================
+REDIS_URL="redis://localhost:6379"
+```
+
+---
+
+## 🐛 Known Issues & Bugs
+
+### UI Issues
+
+1. **Input text not visible in some fields**
+   - Form inputs on light backgrounds have styling issues
+   - Text color may be same as background
+
+2. **Generic AI-generated UI appearance**
+   - Dashboard and studio pages need design polish
+   - Inconsistent spacing and typography
+   - No loading states or animations
+
+3. **Invite code shows "undefined"**
+   - The `inviteCode` field doesn't exist in the database schema
+   - Dashboard tries to display non-existent field
+
+### Functional Issues
+
+4. **Studio call page is empty**
+   - LiveKit `VideoConference` component not rendering participants
+   - Recording controls not connected to MediaRecorderService
+   - Socket.io events not triggering properly
+
+5. **Recording doesn't work**
+   - MediaRecorderService exists but not properly initialized
+   - Chunk upload endpoint exists but integration incomplete
+
+6. **No way to share/invite to studio**
+   - Missing invite link generation
+   - No guest join flow
+
+### Technical Debt
+
+7. **Unused imports and dead code**
+   - Several unused components and imports throughout
+
+8. **Missing error handling**
+   - API routes need better error responses
+   - Client needs error toasts/notifications
+
+---
+
+## 🏗 Architecture
 
 ```
-# With [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation) installed (recommended)
-turbo link
-
-# Without [global `turbo`](https://turborepo.com/docs/getting-started/installation#global-installation), use your package manager
-npx turbo link
-yarn exec turbo link
-pnpm exec turbo link
+┌─────────────────────────────────────────────────────────────┐
+│                      Browser (Client)                        │
+├─────────────────────────────────────────────────────────────┤
+│  ┌──────────────────┐         ┌──────────────────────────┐ │
+│  │  LiveKit Client  │         │  MediaRecorder Service   │ │
+│  │  (Real-time)     │         │  (Local Recording)       │ │
+│  │                  │         │                          │ │
+│  │  • Adaptive      │         │  • 4K Video (max)        │ │
+│  │  • Low latency   │         │  • 48kHz Audio           │ │
+│  │  • WebRTC        │         │  • 10s chunk upload      │ │
+│  └────────┬─────────┘         └────────────┬─────────────┘ │
+└───────────┼────────────────────────────────┼───────────────┘
+            │                                │
+            ▼                                ▼
+┌───────────────────────┐      ┌───────────────────────────┐
+│   LiveKit Server      │      │   Next.js API             │
+│   (WebRTC SFU)        │      │   /api/upload-chunk       │
+│   ws://localhost:7880 │      │   /api/studios            │
+└───────────────────────┘      └─────────────┬─────────────┘
+                                             │
+            ┌────────────────────────────────┼───────────────┐
+            │                                │               │
+            ▼                                ▼               ▼
+┌───────────────────┐       ┌───────────────────┐  ┌──────────────┐
+│   Redis           │       │   PostgreSQL      │  │   MinIO      │
+│   (Socket.io)     │       │   (Metadata)      │  │   (Chunks)   │
+│   :6379           │       │   :5432           │  │   :9000      │
+└───────────────────┘       └───────────────────┘  └──────────────┘
 ```
 
-## Useful Links
+---
 
-Learn more about the power of Turborepo:
+## 🗺 Roadmap
 
-- [Tasks](https://turborepo.com/docs/crafting-your-repository/running-tasks)
-- [Caching](https://turborepo.com/docs/crafting-your-repository/caching)
-- [Remote Caching](https://turborepo.com/docs/core-concepts/remote-caching)
-- [Filtering](https://turborepo.com/docs/crafting-your-repository/running-tasks#using-filters)
-- [Configuration Options](https://turborepo.com/docs/reference/configuration)
-- [CLI Usage](https://turborepo.com/docs/reference/command-line-reference)
+### Phase 1: Core Functionality (Current)
+- [x] Project setup with Turborepo
+- [x] Authentication with Better Auth
+- [x] Database schema and migrations
+- [x] Basic UI pages
+- [ ] Fix LiveKit VideoConference rendering
+- [ ] Complete MediaRecorder integration
+- [ ] Test chunk upload flow
+
+### Phase 2: Essential Features
+- [ ] Add `inviteCode` to Studio schema
+- [ ] Implement invite link sharing
+- [ ] Guest join flow (no auth required)
+- [ ] Recording playback/download
+- [ ] Fix all UI input styling issues
+
+### Phase 3: Polish
+- [ ] Redesign UI (remove AI-generated look)
+- [ ] Add proper loading states
+- [ ] Implement error notifications
+- [ ] Mobile responsive design
+- [ ] Recording post-processing (merge chunks)
+
+### Phase 4: Advanced Features
+- [ ] Screen sharing
+- [ ] In-call chat
+- [ ] Multiple audio/video tracks per participant
+- [ ] Cloud deployment guide
+
+---
+
+## 📜 Commands Reference
+
+```bash
+# Development
+pnpm dev                    # Start dev server
+pnpm build                  # Production build
+pnpm start                  # Start production server
+
+# Database
+pnpm db:generate            # Generate Prisma client
+pnpm db:migrate             # Run migrations (dev)
+pnpm db:push                # Push schema changes
+pnpm db:studio              # Open Prisma Studio
+
+# Docker
+docker-compose up -d        # Start all services
+docker-compose down         # Stop all services
+docker-compose logs -f      # View logs
+```
+
+---
+
+## 📄 License
+
+MIT License - see LICENSE file for details.
+
+---
+
+## 🙏 Acknowledgments
+
+- Inspired by [Riverside.fm](https://riverside.fm)
+- Built with [LiveKit](https://livekit.io)
+- Powered by [Next.js](https://nextjs.org) and [Turborepo](https://turbo.build)

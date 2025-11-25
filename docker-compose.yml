@@ -1,0 +1,145 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: streamside-postgres
+    environment:
+      POSTGRES_USER: streamside
+      POSTGRES_PASSWORD: streamside123
+      POSTGRES_DB: streamside
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U streamside']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - streamside-network
+
+  # Redis for Socket.io adapter and caching
+  redis:
+    image: redis:7-alpine
+    container_name: streamside-redis
+    ports:
+      - '6379:6379'
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - streamside-network
+
+  # MinIO for object storage
+  minio:
+    image: minio/minio:latest
+    container_name: streamside-minio
+    ports:
+      - '9000:9000'
+      - '9001:9001' # MinIO Console
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:9000/minio/health/live']
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - streamside-network
+
+  # MinIO bucket creation (runs once)
+  minio-init:
+    image: minio/mc:latest
+    container_name: streamside-minio-init
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 10;
+      /usr/bin/mc alias set myminio http://minio:9000 minioadmin minioadmin;
+      /usr/bin/mc mb myminio/recordings --ignore-existing;
+      /usr/bin/mc anonymous set download myminio/recordings;
+      exit 0;
+      "
+    networks:
+      - streamside-network
+
+  # LiveKit SFU Server
+  livekit:
+    image: livekit/livekit-server:latest
+    container_name: streamside-livekit
+    ports:
+      - '7880:7880' # WebSocket
+      - '7881:7881' # HTTP
+      - '7882:7882/udp' # RTC
+    environment:
+      LIVEKIT_KEYS: 'devkey: secret'
+      LIVEKIT_REDIS_HOST: redis:6379
+    volumes:
+      - ./livekit.yaml:/etc/livekit.yaml
+    command: --config /etc/livekit.yaml --node-ip=127.0.0.1
+    depends_on:
+      - redis
+    networks:
+      - streamside-network
+
+  # Next.js Web Application
+  web:
+    build:
+      context: ./apps/web
+      dockerfile: Dockerfile
+    container_name: streamside-web
+    ports:
+      - '3000:3000'
+    environment:
+      DATABASE_URL: postgresql://streamside:streamside123@postgres:5432/streamside?schema=public
+      NEXTAUTH_URL: http://localhost:3000
+      NEXTAUTH_SECRET: your-secret-key-change-this-in-production
+      LIVEKIT_API_KEY: devkey
+      LIVEKIT_API_SECRET: secret
+      LIVEKIT_WS_URL: ws://livekit:7880
+      NEXT_PUBLIC_LIVEKIT_WS_URL: ws://localhost:7880
+      MINIO_ENDPOINT: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      MINIO_BUCKET_NAME: recordings
+      MINIO_USE_SSL: 'false'
+      REDIS_URL: redis://redis:6379
+      NODE_ENV: production
+      NEXT_PUBLIC_APP_URL: http://localhost:3000
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      livekit:
+        condition: service_started
+    volumes:
+      - ./apps/web:/app
+      - /app/node_modules
+      - /app/.next
+    networks:
+      - streamside-network
+
+volumes:
+  postgres_data:
+  redis_data:
+  minio_data:
+
+networks:
+  streamside-network:
+    driver: bridge

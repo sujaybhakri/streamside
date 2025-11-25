@@ -1,26 +1,26 @@
 {
-  "name": "@repo/ui",
-  "version": "0.0.0",
+  "name": "@streamside/ui",
+  "version": "1.0.0",
   "private": true,
+  "main": "./src/index.tsx",
+  "types": "./src/index.tsx",
   "exports": {
-    "./*": "./src/*.tsx"
+    ".": "./src/index.tsx",
+    "./button": "./src/button.tsx",
+    "./card": "./src/card.tsx"
   },
-  "scripts": {
-    "lint": "eslint . --max-warnings 0",
-    "generate:component": "turbo gen react-component",
-    "check-types": "tsc --noEmit"
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
   },
   "devDependencies": {
-    "@repo/eslint-config": "*",
-    "@repo/typescript-config": "*",
-    "@types/node": "^22.15.3",
-    "@types/react": "19.1.0",
-    "@types/react-dom": "19.1.1",
-    "eslint": "^9.34.0",
-    "typescript": "5.9.2"
+    "@types/react": "^19.2.7",
+    "@types/react-dom": "^19.2.3",
+    "tailwindcss": "^4.1.17",
+    "typescript": "^5.9.3"
   },
   "dependencies": {
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0"
+    "clsx": "^2.1.1",
+    "tailwind-merge": "^3.4.0"
   }
 }

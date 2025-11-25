@@ -1,4 +1,12 @@
 /** @type {import('next').NextConfig} */
-const nextConfig = {};
+const nextConfig = {
+    reactStrictMode: true,
+    output: 'standalone',
+    experimental: {
+        serverActions: {
+            bodySizeLimit: '100mb', // For large video chunks
+        },
+    },
+}
 
-export default nextConfig;
+module.exports = nextConfig

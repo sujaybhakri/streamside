@@ -1,0 +1,127 @@
+// This is your Prisma schema file for Streamside
+// Uses PostgreSQL with Supabase
+
+generator client {
+    provider = "prisma-client-js"
+    // Note: driverAdapters is now stable in Prisma 7+, no need for preview feature
+}
+
+datasource db {
+    provider = "postgresql"
+    // Note: In Prisma 7+, connection URLs are configured via prisma.config.ts
+    // The client uses a pg adapter passed to PrismaClient constructor
+}
+
+// ==========================================
+// Better Auth Models
+// ==========================================
+
+model User {
+    id            String   @id @default(cuid())
+    email         String   @unique
+    emailVerified Boolean  @default(false)
+    name          String?
+    image         String?
+    createdAt     DateTime @default(now())
+    updatedAt     DateTime @updatedAt
+
+    // Better Auth relations
+    accounts Account[]
+    sessions Session[]
+
+    // App-specific relations
+    studios    Studio[]
+    recordings Recording[]
+}
+
+model Account {
+    id                    String    @id @default(cuid())
+    userId                String
+    accountId             String
+    providerId            String
+    accessToken           String?
+    refreshToken          String?
+    accessTokenExpiresAt  DateTime?
+    refreshTokenExpiresAt DateTime?
+    scope                 String?
+    idToken               String?
+    password              String?
+    createdAt             DateTime  @default(now())
+    updatedAt             DateTime  @updatedAt
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([userId])
+}
+
+model Session {
+    id        String   @id @default(cuid())
+    userId    String
+    token     String   @unique
+    expiresAt DateTime
+    ipAddress String?
+    userAgent String?
+    createdAt DateTime @default(now())
+    updatedAt DateTime @updatedAt
+
+    user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+    @@index([userId])
+}
+
+model Verification {
+    id         String   @id @default(cuid())
+    identifier String
+    value      String
+    expiresAt  DateTime
+    createdAt  DateTime @default(now())
+    updatedAt  DateTime @updatedAt
+
+    @@index([identifier])
+}
+
+// ==========================================
+// Application Models
+// ==========================================
+
+model Studio {
+    id          String   @id @default(cuid())
+    name        String
+    description String?
+    hostId      String
+    isActive    Boolean  @default(true)
+    createdAt   DateTime @default(now())
+    updatedAt   DateTime @updatedAt
+
+    host       User        @relation(fields: [hostId], references: [id], onDelete: Cascade)
+    recordings Recording[]
+
+    @@index([hostId])
+}
+
+model Recording {
+    id              String          @id @default(cuid())
+    studioId        String
+    participantId   String
+    participantName String
+    fileUrl         String?
+    duration        Int? // Duration in seconds
+    size            BigInt          @default(0) // Size in bytes
+    status          RecordingStatus @default(uploading)
+    createdAt       DateTime        @default(now())
+    updatedAt       DateTime        @updatedAt
+
+    studio Studio @relation(fields: [studioId], references: [id], onDelete: Cascade)
+    user   User?  @relation(fields: [participantId], references: [id])
+
+    @@unique([studioId, participantId])
+    @@index([studioId])
+    @@index([participantId])
+}
+
+enum RecordingStatus {
+    uploading
+    processing
+    completed
+    failed
+}
