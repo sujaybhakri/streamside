@@ -3,6 +3,7 @@
 import { useParams, useRouter } from 'next/navigation'
 import { useState, useEffect, useRef } from 'react'
 import { IconVideo, IconAlertTriangle } from '@tabler/icons-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 interface StudioInfo {
     id: string
@@ -175,9 +176,12 @@ export default function InvitePage() {
 
     return (
         <div
-            className="min-h-screen flex items-center justify-center p-4"
+            className="min-h-screen flex items-center justify-center p-4 relative"
             style={{ backgroundColor: 'var(--color-bg-app)' }}
         >
+            <div className="absolute top-4 right-4">
+                <ThemeToggle />
+            </div>
             <div
                 className="max-w-sm w-full p-6 rounded-lg"
                 style={{

@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useSession, authClient } from '@/lib/auth-client'
 import { IconVideo, IconCopy, IconCheck, IconPlayerRecord, IconLogout } from '@tabler/icons-react'
+import { ThemeToggle } from '@/components/theme-toggle'
 
 interface Studio {
     id: string
@@ -117,6 +118,7 @@ export default function Dashboard() {
                 </div>
 
                 <div className="flex items-center gap-3">
+                    <ThemeToggle />
                     <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
                         {session?.user?.name || session?.user?.email}
                     </span>

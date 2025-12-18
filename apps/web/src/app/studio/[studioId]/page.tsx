@@ -1,20 +1,21 @@
+
 'use client'
 
 import { useParams, useRouter } from 'next/navigation'
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import { useSession } from '@/lib/auth-client'
+import { IconMicrophone, IconVideo, IconPlayerRecord, IconArrowRight, IconSettings, IconCopy, IconCheck, IconTrash } from '@tabler/icons-react'
 import { useStudioStore } from '@/store/studio-store'
-import { IconChevronLeft, IconVideo, IconMicrophone } from '@tabler/icons-react'
 
-// Guest session helpers - check both localStorage and sessionStorage
+import { ThemeToggle } from '@/components/theme-toggle'
+
+// Guest session helpers
 function getGuestInfo(): { guestName: string; guestId: string } | null {
     if (typeof window === 'undefined') return null
 
-    // First check sessionStorage
     let guestName = sessionStorage.getItem('guestName')
     let guestId = sessionStorage.getItem('guestId')
 
-    // Fallback to localStorage if session was lost
     if (!guestName || !guestId) {
         try {
             const stored = localStorage.getItem('streamside_guest')
@@ -23,7 +24,6 @@ function getGuestInfo(): { guestName: string; guestId: string } | null {
                 if (Date.now() - data.timestamp < 24 * 60 * 60 * 1000) {
                     guestName = data.guestName
                     guestId = data.guestId
-                    // Restore to sessionStorage
                     if (guestName && guestId) {
                         sessionStorage.setItem('guestName', guestName)
                         sessionStorage.setItem('guestId', guestId)
@@ -31,329 +31,267 @@ function getGuestInfo(): { guestName: string; guestId: string } | null {
                 }
             }
         } catch {
-            // Ignore parse errors
+            // Ignore
         }
     }
 
-    if (guestName && guestId) {
-        return { guestName, guestId }
-    }
+    if (guestName && guestId) return { guestName, guestId }
     return null
 }
 
-export default function StudioLobby() {
+export default function StudioPage() {
     const params = useParams()
     const router = useRouter()
     const { data: session, isPending } = useSession()
     const studioId = params?.studioId as string | undefined
 
-    const { setSelectedCamera, setSelectedMicrophone, setDevices, selectedCamera, selectedMicrophone, cameras, microphones } =
-        useStudioStore()
-
-    const [previewStream, setPreviewStream] = useState<MediaStream | null>(null)
+    const [studio, setStudio] = useState<any>(null)
     const [isLoading, setIsLoading] = useState(true)
+    const [deviceError, setDeviceError] = useState<string | null>(null)
+    const [copied, setCopied] = useState(false)
+    const [isDeleting, setIsDeleting] = useState(false)
     const [guestInfo, setGuestInfo] = useState<{ guestName: string; guestId: string } | null>(null)
+
+    // Device state from store
+    const {
+        cameras,
+        microphones,
+        selectedCamera,
+        selectedMicrophone,
+        setDevices,
+        setSelectedCamera,
+        setSelectedMicrophone
+    } = useStudioStore()
+
     const videoRef = useRef<HTMLVideoElement>(null)
 
-    // Initialize guest info on mount
     useEffect(() => {
         const info = getGuestInfo()
-        if (info) {
-            setGuestInfo(info)
-        }
-        setIsLoading(false)
+        if (info) setGuestInfo(info)
     }, [])
 
-    // Redirect to signin only if: not pending, no session, AND no guest info
     useEffect(() => {
-        // Wait for auth to finish loading
-        if (isPending) return
-
-        // Already has a session, no redirect needed
-        if (session) return
-
-        // Check for guest info with a slight delay to ensure state is set
-        const timer = setTimeout(() => {
-            const info = getGuestInfo()
-            if (!info && !guestInfo) {
-                router.push('/auth/signin')
-            } else if (info && !guestInfo) {
-                // State wasn't set yet, set it now
-                setGuestInfo(info)
-            }
-        }, 300) // Increased delay for state to settle
-
-        return () => clearTimeout(timer)
+        if (!isPending && !session && !guestInfo) {
+            // Delay redirect slightly to ensure we've checked for guest info
+            const timer = setTimeout(() => {
+                 // Double check guest info
+                 const info = getGuestInfo()
+                 if (!info) router.push('/auth/signin')
+            }, 200)
+            return () => clearTimeout(timer)
+        }
     }, [isPending, session, guestInfo, router])
 
     useEffect(() => {
-        if (!session && !guestInfo) return
+        if (!studioId) return
 
-        async function enumerateDevices() {
+        async function fetchStudio() {
             try {
-                // Check if we're in a secure context (HTTPS or localhost)
-                // getUserMedia requires secure context on non-localhost
-                const isSecure = window.isSecureContext ||
-                    window.location.hostname === 'localhost' ||
-                    window.location.hostname === '127.0.0.1'
-
-                if (!isSecure || !navigator.mediaDevices?.getUserMedia) {
-                    console.warn('Media devices not available (requires HTTPS or localhost)')
-                    setIsLoading(false)
-                    return
+                const res = await fetch(`/api/studios/${studioId}`)
+                if (res.ok) {
+                    const data = await res.json()
+                    setStudio(data.studio)
                 }
-
-                await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-                const devices = await navigator.mediaDevices.enumerateDevices()
-
-                const videoDevices = devices.filter(d => d.kind === 'videoinput')
-                const audioDevices = devices.filter(d => d.kind === 'audioinput')
-
-                setDevices(videoDevices, audioDevices)
-
-                if (videoDevices.length > 0 && !selectedCamera) {
-                    setSelectedCamera(videoDevices[0].deviceId)
-                }
-                if (audioDevices.length > 0 && !selectedMicrophone) {
-                    setSelectedMicrophone(audioDevices[0].deviceId)
-                }
-
-                setIsLoading(false)
             } catch (error) {
-                console.error('Error enumerating devices:', error)
+                console.error('Failed to load studio', error)
+            } finally {
                 setIsLoading(false)
             }
         }
-
-        enumerateDevices()
-    }, [session, guestInfo, setDevices, setSelectedCamera, setSelectedMicrophone, selectedCamera, selectedMicrophone])
-
-    const startPreview = useCallback(async () => {
-        if (!selectedCamera) return
-
-        if (previewStream) {
-            previewStream.getTracks().forEach(track => track.stop())
-        }
-
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { deviceId: selectedCamera },
-                audio: selectedMicrophone ? { deviceId: selectedMicrophone } : false,
-            })
-            setPreviewStream(stream)
-        } catch (error) {
-            console.error('Error starting preview:', error)
-        }
-    }, [selectedCamera, selectedMicrophone, previewStream])
+        fetchStudio()
+    }, [studioId])
 
     useEffect(() => {
-        if (selectedCamera) {
-            startPreview()
+        async function getDevices() {
+            try {
+                // Request permissions first
+                await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+                
+                const devices = await navigator.mediaDevices.enumerateDevices()
+                const cams = devices.filter(d => d.kind === 'videoinput')
+                const mics = devices.filter(d => d.kind === 'audioinput')
+
+                setDevices(cams, mics)
+                
+                if (cams.length > 0 && !selectedCamera) setSelectedCamera(cams[0].deviceId)
+                if (mics.length > 0 && !selectedMicrophone) setSelectedMicrophone(mics[0].deviceId)
+            } catch (err) {
+                console.error('Device permission error:', err)
+                setDeviceError('Camera and microphone access is required to join the studio.')
+            }
         }
+        getDevices()
+    }, [setDevices, selectedCamera, selectedMicrophone, setSelectedCamera, setSelectedMicrophone])
+
+    useEffect(() => {
+        if (!selectedCamera || !videoRef.current) return
+
+        let stream: MediaStream | null = null
+
+        async function startPreview() {
+            try {
+                stream = await navigator.mediaDevices.getUserMedia({
+                    video: { deviceId: selectedCamera || undefined }
+                })
+                if (videoRef.current) {
+                    videoRef.current.srcObject = stream
+                }
+            } catch (err) {
+                console.error('Preview error:', err)
+            }
+        }
+        startPreview()
 
         return () => {
-            if (previewStream) {
-                previewStream.getTracks().forEach(track => track.stop())
-            }
+            stream?.getTracks().forEach(t => t.stop())
         }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [selectedCamera, selectedMicrophone])
+    }, [selectedCamera])
 
-    useEffect(() => {
-        if (videoRef.current && previewStream) {
-            videoRef.current.srcObject = previewStream
-        }
-    }, [previewStream])
-
-    const handleJoinStudio = () => {
-        if (previewStream) {
-            previewStream.getTracks().forEach(track => track.stop())
-        }
-        router.push(`/studio/${studioId}/call`)
+    const copyInviteLink = () => {
+        if (!studio) return
+        const url = `${window.location.origin}/invite/${studio.inviteCode}`
+        navigator.clipboard.writeText(url)
+        setCopied(true)
+        setTimeout(() => setCopied(false), 2000)
     }
 
-    if (!session && !guestInfo && !isPending) return null
+    const handleDeleteStudio = async () => {
+        if (!confirm('Are you sure you want to delete this studio? This cannot be undone.')) return
+        setIsDeleting(true)
+        try {
+            await fetch(`/api/studios/${studioId}`, { method: 'DELETE' })
+            router.push('/dashboard')
+        } catch (error) {
+            console.error('Delete failed:', error)
+            setIsDeleting(false)
+        }
+    }
 
-    if (isLoading) {
-        return (
-            <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-app)' }}>
-                <div className="flex items-center gap-3">
-                    <div className="w-4 h-4 border-2 border-[var(--color-text-muted)] border-t-transparent rounded-full animate-spin" />
-                    <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>Preparing...</span>
-                </div>
+    if (isLoading || isPending) {
+         return (
+            <div className="h-screen w-screen flex items-center justify-center" style={{ backgroundColor: 'var(--color-bg-app)' }}>
+                <div className="w-5 h-5 border-2 border-[var(--color-text-muted)] border-t-transparent rounded-full animate-spin" />
             </div>
         )
     }
 
-    const userName = session?.user?.name || guestInfo?.guestName || 'Guest'
+    if (!studio) return null
+
+    const isHost = session?.user?.id === studio.hostId
 
     return (
-        <div className="min-h-screen" style={{ backgroundColor: 'var(--color-bg-app)' }}>
-            {/* Top Bar */}
-            <header
-                className="h-12 flex items-center justify-between px-5"
-                style={{
-                    backgroundColor: 'var(--color-bg-subtle)',
-                    borderBottom: '1px solid var(--color-border-subtle)',
-                }}
-            >
-                <div className="flex items-center gap-2">
-                    <button
-                        onClick={() => router.push('/dashboard')}
-                        className="h-7 w-7 rounded-md flex items-center justify-center"
-                        style={{
-                            backgroundColor: 'var(--color-bg-overlay)',
-                            border: '1px solid var(--color-border-subtle)',
-                        }}
-                    >
-                        <IconChevronLeft size={16} stroke={1.5} style={{ color: 'var(--color-text-muted)' }} />
-                    </button>
-                    <span className="font-medium text-sm" style={{ color: 'var(--color-text-primary)' }}>
-                        Studio Lobby
-                    </span>
+        <div className="min-h-screen p-4 flex items-center justify-center relative" style={{ backgroundColor: 'var(--color-bg-app)' }}>
+            <div className="absolute top-4 right-4 z-10">
+                <ThemeToggle />
+            </div>
+            <div className="max-w-4xl w-full grid grid-cols-1 md:grid-cols-2 gap-8">
+                
+                {/* Left: Preview */}
+                <div className="space-y-4">
+                    <div className="aspect-video rounded-xl overflow-hidden bg-black relative shadow-2xl ring-1 ring-[var(--color-border-subtle)]">
+                        {deviceError ? (
+                            <div className="absolute inset-0 flex items-center justify-center text-center p-6">
+                                <p className="text-sm" style={{ color: 'var(--color-text-danger)' }}>{deviceError}</p>
+                            </div>
+                        ) : (
+                            <video 
+                                ref={videoRef} 
+                                autoPlay 
+                                playsInline 
+                                muted 
+                                className="w-full h-full object-cover transform scale-x-[-1]" 
+                            />
+                        )}
+                        <div className="absolute bottom-4 left-4 right-4 flex gap-2">
+                            <div className="flex-1">
+                                <select 
+                                    value={selectedCamera || ''} 
+                                    onChange={e => setSelectedCamera(e.target.value)}
+                                    className="w-full h-9 rounded-lg px-3 text-xs bg-black/50 backdrop-blur text-white border-0 appearance-none"
+                                >
+                                    {cameras.map(c => <option key={c.deviceId} value={c.deviceId}>{c.label || 'Camera ' + c.deviceId.slice(0,5)}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex-1">
+                                <select 
+                                    value={selectedMicrophone || ''} 
+                                    onChange={e => setSelectedMicrophone(e.target.value)}
+                                    className="w-full h-9 rounded-lg px-3 text-xs bg-black/50 backdrop-blur text-white border-0 appearance-none"
+                                >
+                                    {microphones.map(m => <option key={m.deviceId} value={m.deviceId}>{m.label || 'Mic ' + m.deviceId.slice(0,5)}</option>)}
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="flex justify-center gap-4 text-xs" style={{ color: 'var(--color-text-muted)' }}>
+                        <div className="flex items-center gap-1.5">
+                            <IconVideo size={16} /> Check Video
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <IconMicrophone size={16} /> Check Audio
+                        </div>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2">
-                    <span className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                        {userName}
-                    </span>
-                    {guestInfo && (
-                        <span
-                            className="px-1.5 py-0.5 text-xs rounded"
-                            style={{
-                                backgroundColor: 'var(--color-bg-overlay)',
-                                color: 'var(--color-text-muted)',
-                            }}
+
+                {/* Right: Info & Actions */}
+                <div className="flex flex-col justify-center space-y-8">
+                    <div>
+                        <h1 className="text-2xl font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>{studio.name}</h1>
+                        <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>Ready to join session?</p>
+                    </div>
+
+                    <div className="space-y-3">
+                        <button
+                            onClick={() => router.push(`/studio/${studioId}/call`)}
+                            className="w-full h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-2 hover:opacity-90 transition-opacity"
+                            style={{ backgroundColor: 'var(--color-accent-base)', color: '#fff' }}
                         >
-                            Guest
-                        </span>
+                            Join Studio <IconArrowRight size={18} />
+                        </button>
+                        
+                        <button
+                            onClick={() => router.push(`/studio/${studioId}/recordings`)}
+                            className="w-full h-12 rounded-xl text-sm font-medium flex items-center justify-center gap-2"
+                            style={{ backgroundColor: 'var(--color-bg-raised)', border: '1px solid var(--color-border-subtle)', color: 'var(--color-text-secondary)' }}
+                        >
+                            <IconPlayerRecord size={18} stroke={1.5} /> View Recordings
+                        </button>
+                    </div>
+
+                    {isHost && (
+                        <div className="pt-8 border-t border-[var(--color-border-subtle)] space-y-4">
+                            <div>
+                                <label className="text-xs font-medium mb-1.5 block" style={{ color: 'var(--color-text-muted)' }}>Invite Link</label>
+                                <div className="flex items-center gap-2">
+                                    <input 
+                                        type="text" 
+                                        readOnly 
+                                        value={`${window.location.origin}/invite/${studio.inviteCode}`}
+                                        className="flex-1 h-9 rounded-lg px-3 text-xs border-none outline-none"
+                                        style={{ backgroundColor: 'var(--color-bg-sunken)', color: 'var(--color-text-secondary)' }}
+                                    />
+                                    <button 
+                                        onClick={copyInviteLink}
+                                        className="h-9 px-3 rounded-lg flex items-center justify-center transition-colors"
+                                        style={{ backgroundColor: 'var(--color-bg-raised)', border: '1px solid var(--color-border-subtle)', color: copied ? 'var(--color-text-success)' : 'var(--color-text-secondary)' }}
+                                    >
+                                        {copied ? <IconCheck size={16} /> : <IconCopy size={16} />}
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <button 
+                                onClick={handleDeleteStudio}
+                                disabled={isDeleting}
+                                className="text-xs flex items-center gap-1.5 hover:underline"
+                                style={{ color: 'var(--color-text-danger)' }}
+                            >
+                                <IconTrash size={14} /> Delete Studio
+                            </button>
+                        </div>
                     )}
                 </div>
-            </header>
-
-            {/* Main Content */}
-            <main className="max-w-3xl mx-auto px-5 py-10">
-                <div className="text-center mb-6">
-                    <h1 className="text-lg font-semibold mb-1" style={{ color: 'var(--color-text-primary)' }}>
-                        Ready to join?
-                    </h1>
-                    <p className="text-xs" style={{ color: 'var(--color-text-muted)' }}>
-                        Check your camera and microphone
-                    </p>
-                </div>
-
-                <div className="grid lg:grid-cols-2 gap-6">
-                    {/* Video Preview */}
-                    <div
-                        className="rounded-lg overflow-hidden aspect-video relative"
-                        style={{
-                            backgroundColor: 'var(--color-bg-sunken)',
-                            border: '1px solid var(--color-border-subtle)',
-                        }}
-                    >
-                        {previewStream ? (
-                            <video
-                                ref={videoRef}
-                                autoPlay
-                                playsInline
-                                muted
-                                className="w-full h-full object-cover"
-                                style={{ transform: 'scaleX(-1)' }}
-                            />
-                        ) : (
-                            <div className="w-full h-full flex items-center justify-center">
-                                <IconVideo size={32} stroke={1} style={{ color: 'var(--color-text-subtle)' }} />
-                            </div>
-                        )}
-
-                        {/* Name overlay */}
-                        <div
-                            className="absolute bottom-2 left-2 px-2 py-1 rounded text-xs font-medium"
-                            style={{
-                                backgroundColor: 'rgba(0, 0, 0, 0.6)',
-                                color: 'var(--color-text-primary)',
-                            }}
-                        >
-                            {userName}
-                        </div>
-                    </div>
-
-                    {/* Device Selection */}
-                    <div
-                        className="p-5 rounded-lg space-y-5"
-                        style={{
-                            backgroundColor: 'var(--color-bg-raised)',
-                            border: '1px solid var(--color-border-subtle)',
-                        }}
-                    >
-                        {/* Camera */}
-                        <div>
-                            <label className="flex items-center gap-1.5 text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                                <IconVideo size={14} stroke={1.5} />
-                                Camera
-                            </label>
-                            <select
-                                value={selectedCamera || ''}
-                                onChange={(e) => setSelectedCamera(e.target.value)}
-                                className="w-full h-9 px-3 rounded-md text-sm cursor-pointer"
-                                style={{
-                                    backgroundColor: 'var(--color-bg-sunken)',
-                                    border: '1px solid var(--color-border-subtle)',
-                                    color: 'var(--color-text-primary)',
-                                }}
-                            >
-                                <option value="">Select camera</option>
-                                {cameras.map((camera) => (
-                                    <option key={camera.deviceId} value={camera.deviceId}>
-                                        {camera.label || `Camera ${camera.deviceId.slice(0, 8)}`}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Microphone */}
-                        <div>
-                            <label className="flex items-center gap-1.5 text-xs font-medium mb-1.5" style={{ color: 'var(--color-text-muted)' }}>
-                                <IconMicrophone size={14} stroke={1.5} />
-                                Microphone
-                            </label>
-                            <select
-                                value={selectedMicrophone || ''}
-                                onChange={(e) => setSelectedMicrophone(e.target.value)}
-                                className="w-full h-9 px-3 rounded-md text-sm cursor-pointer"
-                                style={{
-                                    backgroundColor: 'var(--color-bg-sunken)',
-                                    border: '1px solid var(--color-border-subtle)',
-                                    color: 'var(--color-text-primary)',
-                                }}
-                            >
-                                <option value="">Select microphone</option>
-                                {microphones.map((mic) => (
-                                    <option key={mic.deviceId} value={mic.deviceId}>
-                                        {mic.label || `Microphone ${mic.deviceId.slice(0, 8)}`}
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-
-                        {/* Join */}
-                        <button
-                            onClick={handleJoinStudio}
-                            disabled={!selectedCamera}
-                            className="w-full h-10 rounded-md font-medium text-sm transition-all disabled:opacity-40"
-                            style={{
-                                backgroundColor: 'var(--color-accent-base)',
-                                color: '#fff',
-                            }}
-                        >
-                            Join Studio
-                        </button>
-
-                        <p className="text-center text-xs" style={{ color: 'var(--color-text-subtle)' }}>
-                            High-quality local recording enabled
-                        </p>
-                    </div>
-                </div>
-            </main>
+            </div>
         </div>
     )
 }
